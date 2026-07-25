@@ -80,6 +80,33 @@ def whatsapp():
     return _twiml(respuesta)
 
 
+@app.route("/message", methods=["POST"])
+def message():
+    """Endpoint JSON para puentes externos (ej. open-wa).
+
+    Recibe {"from": "...", "body": "..."} y devuelve {"reply": "..."}.
+    Mantiene memoria por remitente igual que el webhook de Twilio.
+    """
+    datos = request.get_json(silent=True) or {}
+    remitente = str(datos.get("from") or "desconocido")
+    cuerpo = (datos.get("body") or "").strip()
+
+    if not cuerpo:
+        return {"reply": "Hola 👋 Soy el asistente de Haceb. ¿En qué te ayudo con tu electrodoméstico?"}
+
+    if cuerpo.lower() in ("reiniciar", "reset", "empezar"):
+        _memoria.pop(remitente, None)
+        return {"reply": "Listo, empezamos de nuevo. ¿En qué te ayudo?"}
+
+    try:
+        respuesta = responder_texto(remitente, cuerpo)
+    except Exception as e:
+        app.logger.error("fallo agente: %s", e)
+        respuesta = ("Tuve un problema consultando la información. "
+                     "Intenta de nuevo o escribe *reiniciar*.")
+    return {"reply": respuesta}
+
+
 @app.route("/", methods=["GET"])
 def salud():
     return {"servicio": "agente Haceb WhatsApp", "estado": "ok"}
