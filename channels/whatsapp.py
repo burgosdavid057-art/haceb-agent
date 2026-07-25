@@ -186,6 +186,51 @@ DEMO_HTML = """<!doctype html>
 </script></body></html>"""
 
 
+@app.route("/audio", methods=["POST"])
+def audio():
+    """Recibe una nota de voz (audio en base64), la transcribe con Whisper y
+    responde como si fuera un mensaje de texto.
+
+        {"from": "...", "audio": "<base64>", "mime": "audio/ogg"}
+        -> {"reply": "...", "transcripcion": "lo que dijo el usuario"}
+    """
+    import base64
+
+    from agent import transcribe
+
+    datos = request.get_json(silent=True) or {}
+    remitente = _primer_campo(datos, _CAMPOS_FROM) or "desconocido"
+    b64 = datos.get("audio") or datos.get("data") or ""
+    mime = (datos.get("mime") or "audio/ogg").lower()
+
+    if not b64:
+        return {"reply": "No recibí el audio. Intenta de nuevo.", "transcripcion": ""}
+    if not transcribe.disponible():
+        return {"reply": "La transcripción de voz no está disponible en este momento; "
+                         "escríbeme el mensaje, por favor.", "transcripcion": ""}
+    try:
+        crudo = base64.b64decode(b64)
+    except Exception:
+        return {"reply": "El audio llegó dañado. ¿Puedes reenviarlo?", "transcripcion": ""}
+
+    sufijo = ".ogg" if "og" in mime else ".mp3" if "mp" in mime else ".m4a" if "mp4" in mime or "m4a" in mime else ".wav"
+    texto = transcribe.transcribir(crudo, sufijo)
+    if not texto:
+        return {"reply": "No logré entender el audio. ¿Me lo escribes o lo repites?",
+                "transcripcion": ""}
+
+    try:
+        respuesta = responder_texto(remitente, texto)
+    except Exception as e:
+        app.logger.error("fallo agente (audio): %s", e)
+        respuesta = "Tuve un problema procesando tu mensaje. Intenta de nuevo."
+
+    return {
+        "reply": respuesta, "response": respuesta, "message": respuesta,
+        "transcripcion": texto, "from": remitente,
+    }
+
+
 @app.route("/demo", methods=["GET"])
 def demo():
     return DEMO_HTML

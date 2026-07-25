@@ -20,6 +20,7 @@ const qrimg = require('qrcode');
 const path = require('path');
 
 const AGENTE = process.env.AGENTE_URL || 'http://localhost:5000/message';
+const AGENTE_AUDIO = process.env.AGENTE_AUDIO_URL || 'http://localhost:5000/audio';
 
 // Usa el Chrome del sistema (no baja Chromium). Ajusta la ruta si tu Chrome
 // está en otro lado, o instala Chromium con: npx puppeteer browsers install chrome
@@ -62,21 +63,41 @@ client.on('disconnected', (r) => console.error('Desconectado:', r));
 client.on('message', async (msg) => {
   // Ignora estados, grupos y mensajes propios.
   if (msg.isStatus || msg.from.endsWith('@g.us') || msg.fromMe) return;
-  const body = (msg.body || '').trim();
-  if (!body) return;
 
-  console.log(`<- ${msg.from}: ${body}`);
+  const esVoz = msg.type === 'ptt' || msg.type === 'audio';
+  const body = (msg.body || '').trim();
+  if (!esVoz && !body) return;
+
   try {
     try { const chat = await msg.getChat(); await chat.sendStateTyping(); } catch (_) {}
 
-    const resp = await fetch(AGENTE, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: msg.from, body }),
-    });
-    const data = await resp.json();
-    const reply = data.reply || 'No pude responder en este momento.';
+    let data;
+    if (esVoz) {
+      // Nota de voz: descargar y mandar a Whisper (endpoint /audio del agente).
+      console.log(`<- ${msg.from}: [nota de voz]`);
+      const media = await msg.downloadMedia();
+      if (!media || !media.data) {
+        await msg.reply('No pude descargar tu audio. ¿Me lo escribes?');
+        return;
+      }
+      const resp = await fetch(AGENTE_AUDIO, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: msg.from, audio: media.data, mime: media.mimetype }),
+      });
+      data = await resp.json();
+      if (data.transcripcion) console.log(`   (dijo: ${data.transcripcion.slice(0, 70)})`);
+    } else {
+      console.log(`<- ${msg.from}: ${body}`);
+      const resp = await fetch(AGENTE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: msg.from, body }),
+      });
+      data = await resp.json();
+    }
 
+    const reply = (data && data.reply) || 'No pude responder en este momento.';
     await msg.reply(reply);   // responde en el mismo chat (soporta formato @lid)
     console.log(`-> ${msg.from}: ${reply.slice(0, 60)}...`);
   } catch (e) {
