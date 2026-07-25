@@ -33,13 +33,21 @@ cualquier "si cabe" o "esta cubierto".
 NO cuentan: saludos, cortesias, preguntas al usuario, ofrecimientos de ayuda,
 ni recomendaciones generales sin cifras.
 
-Se estricto con los numeros: si la respuesta dice 71 cm y la evidencia dice
-70 cm, eso es una afirmacion NO respaldada.
+MUY IMPORTANTE sobre los numeros:
+- El mismo numero puede venir escrito distinto. Trata como IGUALES: 4672700,
+  "4,672,700", "4.672.700", "$4.672.700 COP". No marques por diferencia de
+  formato, separadores de miles, moneda o unidades.
+- Un total o resultado CALCULADO a partir de datos de la evidencia esta
+  respaldado (ej. si la evidencia trae precio + costo de energia, la suma que
+  da el agente esta soportada aunque el total no aparezca literal).
+- Solo marca un numero como no respaldado si CONTRADICE la evidencia (dice 90
+  cuando la evidencia dice 62) o si no tiene ninguna base en ella.
 
-REGLA DE DECISION: primero lista las afirmaciones concretas que NO encuentres
-respaldadas en la evidencia. Luego, "fundamentada" es true SI Y SOLO SI esa
-lista quedo vacia. No marques una respuesta como no fundamentada si no puedes
-señalar cual afirmacion especifica falla: lo que no puedas nombrar, se aprueba.
+REGLA DE DECISION: solo lista una afirmacion como no respaldada cuando
+CONTRADICE la evidencia o no tiene ninguna base en ella. Ante la duda, o si el
+dato coincide salvo el formato, considerala respaldada. "fundamentada" es true
+si la lista quedo vacia. Lo que no puedas señalar como claramente equivocado,
+se aprueba.
 
 Responde SOLO con un JSON valido, sin texto alrededor:
 {
