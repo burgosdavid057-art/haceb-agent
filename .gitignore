@@ -31,3 +31,7 @@ whatsapp-bot/session*.data.json
 
 # Binario de cloudflared (se auto-descarga)
 bin/
+
+# Baileys (sesion WhatsApp)
+whatsapp-bot/baileys_auth/
+whatsapp-bot/qr.png

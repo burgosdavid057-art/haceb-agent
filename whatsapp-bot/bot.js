@@ -1,20 +1,27 @@
 /*
- * Chatbot de WhatsApp conectado al agente Haceb (whatsapp-web.js).
+ * Chatbot de WhatsApp conectado al agente Haceb — con Baileys.
  *
- * Vincula TU número de WhatsApp y responde a quien te escriba con las
- * respuestas fundamentadas del agente. El agente debe estar corriendo en
- * http://localhost:5000 (arráncalo con:  python -m channels.whatsapp).
+ * Baileys descifra los medios (notas de voz) nativamente en Node, sin navegador.
+ * Por eso maneja bien texto Y audio, a diferencia de whatsapp-web.js (cuya
+ * descarga de medios se rompe con el WhatsApp Web actual).
  *
- * ADVERTENCIA: automatiza WhatsApp Web de forma no oficial. Va contra los
- * términos de WhatsApp; el número podría ser baneado. Usa un número de
- * repuesto, no tu personal.
+ * El agente debe estar corriendo en http://localhost:5000
+ * (arráncalo con:  python -m channels.whatsapp).
  *
- * Uso:
- *   cd whatsapp-bot && npm install && npm start
- *   Escanea el QR que aparece:  WhatsApp > Dispositivos vinculados > Vincular
+ * ADVERTENCIA: automatiza WhatsApp de forma no oficial; el número puede ser
+ * baneado. Usa un número de repuesto.
+ *
+ * Uso:  cd whatsapp-bot && npm install && npm start   (escanea el QR)
  */
 
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const {
+  default: makeWASocket,
+  useMultiFileAuthState,
+  downloadMediaMessage,
+  fetchLatestBaileysVersion,
+  DisconnectReason,
+} = require('@whiskeysockets/baileys');
+const { Boom } = require('@hapi/boom');
 const qrcode = require('qrcode-terminal');
 const qrimg = require('qrcode');
 const path = require('path');
@@ -22,89 +29,112 @@ const path = require('path');
 const AGENTE = process.env.AGENTE_URL || 'http://localhost:5000/message';
 const AGENTE_AUDIO = process.env.AGENTE_AUDIO_URL || 'http://localhost:5000/audio';
 
-// Usa el Chrome del sistema (no baja Chromium). Ajusta la ruta si tu Chrome
-// está en otro lado, o instala Chromium con: npx puppeteer browsers install chrome
-const fs = require('fs');
-const CHROMES = [
-  process.env.CHROME_PATH,
-  'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-  'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome',
-].filter(Boolean);
-const chromePath = CHROMES.find((p) => { try { return fs.existsSync(p); } catch { return false; } });
+let logger;
+try {
+  logger = require('pino')({ level: 'silent' });
+} catch (_) {
+  logger = undefined;
+}
 
-const client = new Client({
-  authStrategy: new LocalAuth({ clientId: 'haceb' }),
-  puppeteer: {
-    headless: true,
-    executablePath: chromePath,       // si es undefined, usa el Chromium de puppeteer
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  },
-});
+async function main() {
+  const { state, saveCreds } = await useMultiFileAuthState(
+    path.join(__dirname, 'baileys_auth')
+  );
+  const { version } = await fetchLatestBaileysVersion();
 
-client.on('qr', (qr) => {
-  console.log('\n================  ESCANEA ESTE QR  ================');
-  console.log('WhatsApp en el celular > Dispositivos vinculados > Vincular un dispositivo\n');
-  qrcode.generate(qr, { small: true });
-  // Tambien lo guarda como imagen nitida (qr.png) para escanear mas facil.
-  qrimg.toFile(path.join(__dirname, 'qr.png'), qr, { width: 480, margin: 2 }, (e) => {
-    if (!e) console.log('>> QR tambien guardado en whatsapp-bot/qr.png');
+  const sock = makeWASocket({
+    version,
+    auth: state,
+    logger,
+    printQRInTerminal: false,
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
   });
-});
 
-client.on('authenticated', () => console.log('>> Autenticado. Cargando...'));
-client.on('ready', () => {
-  console.log('\n>> ✅ Agente Haceb CONECTADO a WhatsApp. Esperando mensajes...\n');
-});
-client.on('auth_failure', (m) => console.error('Fallo de autenticación:', m));
-client.on('disconnected', (r) => console.error('Desconectado:', r));
+  sock.ev.on('creds.update', saveCreds);
 
-client.on('message', async (msg) => {
-  // Ignora estados, grupos y mensajes propios.
-  if (msg.isStatus || msg.from.endsWith('@g.us') || msg.fromMe) return;
-
-  const esVoz = msg.type === 'ptt' || msg.type === 'audio';
-  const body = (msg.body || '').trim();
-  if (!esVoz && !body) return;
-
-  try {
-    try { const chat = await msg.getChat(); await chat.sendStateTyping(); } catch (_) {}
-
-    let data;
-    if (esVoz) {
-      // Nota de voz: descargar y mandar a Whisper (endpoint /audio del agente).
-      console.log(`<- ${msg.from}: [nota de voz]`);
-      const media = await msg.downloadMedia();
-      if (!media || !media.data) {
-        await msg.reply('No pude descargar tu audio. ¿Me lo escribes?');
-        return;
-      }
-      const resp = await fetch(AGENTE_AUDIO, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: msg.from, audio: media.data, mime: media.mimetype }),
+  sock.ev.on('connection.update', (u) => {
+    const { connection, lastDisconnect, qr } = u;
+    if (qr) {
+      console.log('\n================  ESCANEA ESTE QR  ================');
+      console.log('WhatsApp > Dispositivos vinculados > Vincular un dispositivo\n');
+      qrcode.generate(qr, { small: true });
+      qrimg.toFile(path.join(__dirname, 'qr.png'), qr, { width: 480, margin: 2 }, (e) => {
+        if (!e) console.log('>> QR tambien en whatsapp-bot/qr.png\n');
       });
-      data = await resp.json();
-      if (data.transcripcion) console.log(`   (dijo: ${data.transcripcion.slice(0, 70)})`);
-    } else {
-      console.log(`<- ${msg.from}: ${body}`);
-      const resp = await fetch(AGENTE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from: msg.from, body }),
-      });
-      data = await resp.json();
     }
+    if (connection === 'open') {
+      console.log('\n>> ✅ Agente Haceb CONECTADO a WhatsApp (Baileys). Esperando mensajes...\n');
+    }
+    if (connection === 'close') {
+      const code =
+        lastDisconnect && lastDisconnect.error instanceof Boom
+          ? lastDisconnect.error.output.statusCode
+          : 0;
+      if (code === DisconnectReason.loggedOut) {
+        console.log('Sesion cerrada. Borra la carpeta baileys_auth y vuelve a escanear.');
+      } else {
+        console.log('Conexion cerrada, reconectando...');
+        main();
+      }
+    }
+  });
 
-    const reply = (data && data.reply) || 'No pude responder en este momento.';
-    await msg.reply(reply);   // responde en el mismo chat (soporta formato @lid)
-    console.log(`-> ${msg.from}: ${reply.slice(0, 60)}...`);
-  } catch (e) {
-    console.error('error al responder:', (e && (e.stack || e.message)) || e);
-    try { await msg.reply('Tuve un problema técnico. Intenta de nuevo en un momento.'); } catch (_) {}
-  }
-});
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+    for (const msg of messages) {
+      const from = msg.key && msg.key.remoteJid;
+      try {
+        if (!msg.message || msg.key.fromMe || !from) continue;
+        if (from.endsWith('@g.us') || from === 'status@broadcast') continue;
 
-console.log('Iniciando WhatsApp... (la primera vez baja Chromium, puede tardar)');
-client.initialize();
+        const m = msg.message.ephemeralMessage
+          ? msg.message.ephemeralMessage.message
+          : msg.message;
+        const text =
+          m.conversation || (m.extendedTextMessage && m.extendedTextMessage.text) || '';
+        const audio = m.audioMessage;
+
+        await sock.sendPresenceUpdate('composing', from);
+
+        let data;
+        if (audio) {
+          console.log(`<- ${from}: [nota de voz]`);
+          const buffer = await downloadMediaMessage(
+            msg, 'buffer', {}, { logger, reuploadRequest: sock.updateMediaMessage }
+          );
+          const b64 = Buffer.from(buffer).toString('base64');
+          const resp = await fetch(AGENTE_AUDIO, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from, audio: b64, mime: audio.mimetype || 'audio/ogg' }),
+          });
+          data = await resp.json();
+          if (data.transcripcion) console.log(`   (dijo: ${data.transcripcion.slice(0, 70)})`);
+        } else if (text.trim()) {
+          console.log(`<- ${from}: ${text}`);
+          const resp = await fetch(AGENTE, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from, body: text }),
+          });
+          data = await resp.json();
+        } else {
+          continue;
+        }
+
+        const reply = (data && data.reply) || 'No pude responder en este momento.';
+        await sock.sendMessage(from, { text: reply });
+        console.log(`-> ${from}: ${reply.slice(0, 60)}...`);
+      } catch (e) {
+        console.error('error:', (e && (e.stack || e.message)) || e);
+        try {
+          if (from) await sock.sendMessage(from, { text: 'Tuve un problema tecnico. Intenta de nuevo.' });
+        } catch (_) {}
+      }
+    }
+  });
+}
+
+console.log('Iniciando WhatsApp (Baileys)...');
+main().catch((e) => console.error('No se pudo iniciar:', e));
