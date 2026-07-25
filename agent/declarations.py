@@ -129,6 +129,37 @@ ESPECIFICACIONES = [
         "requeridos": ["referencia", "componente", "anios_de_uso"],
     },
     {
+        "nombre": "radicar_garantia",
+        "descripcion": (
+            "Crea (radica) una solicitud de garantía cuando un componente SÍ está "
+            "cubierto y el equipo está dañado. Verifica la cobertura y genera un "
+            "número de radicado. Úsala cuando el cliente quiera proceder con la "
+            "garantía de un daño cubierto. Antes, pídele una breve descripción del "
+            "problema y su nombre/teléfono si no los dio."
+        ),
+        "parametros": {
+            "referencia": ("string", "referencia del producto"),
+            "componente": ("string", "compresor, motor, termostato..."),
+            "anios_de_uso": ("number", "antigüedad del equipo en años"),
+            "descripcion": ("string", "descripción breve del daño"),
+            "nombre": ("string", "nombre del cliente"),
+            "telefono": ("string", "teléfono de contacto"),
+        },
+        "requeridos": ["referencia", "componente", "anios_de_uso"],
+    },
+    {
+        "nombre": "consultar_caso",
+        "descripcion": (
+            "Consulta el estado de una solicitud de garantía ya radicada, por su "
+            "número (formato GAR-XXXXXX). Úsala cuando el cliente pregunte por el "
+            "estado de su caso o dé un número de radicado."
+        ),
+        "parametros": {
+            "ticket": ("string", "número del radicado, ej. GAR-A3F9C1"),
+        },
+        "requeridos": ["ticket"],
+    },
+    {
         "nombre": "escalar_a_servicio_tecnico",
         "descripcion": (
             "Deriva a un tecnico humano. Usala obligatoriamente cuando haga falta "

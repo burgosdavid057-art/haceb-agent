@@ -10,6 +10,8 @@ Las declaraciones para el modelo se generan al final del archivo.
 
 from __future__ import annotations
 
+import json
+
 from . import catalog, knowledge
 
 # Tarifa media de energia residencial en Antioquia (COP/kWh), estrato 3-4.
@@ -444,6 +446,122 @@ def verificar_garantia(
     }
 
 
+def _casos_path():
+    from .catalog import CATALOGO
+    return CATALOGO.parent / "casos.json"
+
+
+def _cargar_casos() -> list:
+    p = _casos_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+
+def _guardar_casos(casos: list) -> None:
+    _casos_path().write_text(
+        json.dumps(casos, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def radicar_garantia(
+    referencia: str,
+    componente: str,
+    anios_de_uso: float,
+    descripcion: str | None = None,
+    nombre: str | None = None,
+    telefono: str | None = None,
+) -> dict:
+    """Radica (crea) una solicitud de garantía para un componente cubierto.
+
+    Verifica primero la cobertura con los terminos publicados. Si el componente
+    esta cubierto, crea un caso con numero de radicado y lo guarda. Si no esta
+    cubierto o no se puede determinar, NO radica: lo explica.
+    """
+    import datetime
+    import uuid
+
+    cobertura = verificar_garantia(referencia, componente, anios_de_uso)
+    if not cobertura.get("encontrado"):
+        return cobertura
+    if not cobertura.get("determinable"):
+        return {
+            "radicado": False,
+            "motivo": cobertura.get("motivo"),
+            "texto_garantia": cobertura.get("texto_garantia"),
+            "fuente": cobertura.get("fuente"),
+        }
+    if not cobertura.get("en_garantia"):
+        return {
+            "radicado": False,
+            "en_garantia": False,
+            "cobertura_anios": cobertura.get("cobertura_anios"),
+            "anios_de_uso": anios_de_uso,
+            "mensaje": (
+                f"El {componente} ya no está en garantía: la cobertura es de "
+                f"{cobertura.get('cobertura_anios')} año(s) y el equipo tiene "
+                f"{anios_de_uso}. Puedo derivarte a servicio técnico (reparación "
+                f"con costo)."
+            ),
+            "fuente": cobertura.get("fuente"),
+        }
+
+    p = catalog.por_referencia(referencia)
+    ticket = "GAR-" + uuid.uuid4().hex[:6].upper()
+    caso = {
+        "ticket": ticket,
+        "fecha": datetime.datetime.now().isoformat(timespec="seconds"),
+        "referencia": p["referencia"],
+        "producto": p["nombre"],
+        "componente": componente,
+        "anios_de_uso": anios_de_uso,
+        "cobertura_anios": cobertura.get("cobertura_anios"),
+        "descripcion": descripcion,
+        "nombre": nombre,
+        "telefono": telefono,
+        "estado": "Radicada",
+    }
+    casos = _cargar_casos()
+    casos.append(caso)
+    _guardar_casos(casos)
+
+    faltan = [c for c, v in (("una descripción del daño", descripcion),
+                             ("tu nombre", nombre),
+                             ("un teléfono de contacto", telefono)) if not v]
+    return {
+        "radicado": True,
+        "ticket": ticket,
+        "estado": "Radicada",
+        "producto": p["nombre"],
+        "componente": componente,
+        "cobertura_anios": cobertura.get("cobertura_anios"),
+        "faltan_datos": faltan,
+        "mensaje": (
+            f"Listo, tu solicitud de garantía quedó radicada con el número "
+            f"{ticket} para el {componente} de tu {p['nombre']}. Un técnico de "
+            f"Haceb te contactará. Guarda este número para hacer seguimiento."
+        ),
+        "canal": "Servicio Haceb 01 8000 51 22 22",
+        "fuente": "sistema de garantías Haceb",
+    }
+
+
+def consultar_caso(ticket: str) -> dict:
+    """Consulta el estado de una solicitud de garantía por su número (GAR-...)."""
+    t = (ticket or "").upper().strip()
+    for c in _cargar_casos():
+        if c["ticket"].upper() == t:
+            return {"encontrado": True, "caso": c, "fuente": "sistema de garantías Haceb"}
+    return {
+        "encontrado": False,
+        "motivo": f"No encuentro una solicitud con el número {ticket}. "
+                  f"Verifica el número (formato GAR-XXXXXX).",
+    }
+
+
 def escalar_a_servicio_tecnico(motivo: str, referencia: str | None = None) -> dict:
     """Deriva a un tecnico humano cuando el agente no puede responder con fundamento.
 
@@ -477,6 +595,8 @@ DISPONIBLES = {
     "comparar_costo_total": comparar_costo_total,
     "consultar_manual": consultar_manual,
     "verificar_garantia": verificar_garantia,
+    "radicar_garantia": radicar_garantia,
+    "consultar_caso": consultar_caso,
     "escalar_a_servicio_tecnico": escalar_a_servicio_tecnico,
 }
 
