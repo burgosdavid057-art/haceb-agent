@@ -35,3 +35,10 @@ bin/
 # Baileys (sesion WhatsApp)
 whatsapp-bot/baileys_auth/
 whatsapp-bot/qr.png
+
+# Datos de runtime (casos de garantia radicados)
+data/casos.json
+data/garantias.json
+whatsapp-bot/.wwebjs_cache/
+whatsapp-bot/.wwebjs_auth/
+test_voz.wav
