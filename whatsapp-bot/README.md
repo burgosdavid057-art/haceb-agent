@@ -1,11 +1,13 @@
 # Agente Haceb en TU WhatsApp
 
 Conecta el agente a un **WhatsApp real** usando
-[whatsapp-web.js](https://wwebjs.dev/): vinculas un número, y quien te escriba
-recibe respuestas fundamentadas del agente.
+[Baileys](https://github.com/WhiskeySockets/Baileys): vinculas un número, y quien
+te escriba (texto **o nota de voz**) recibe respuestas fundamentadas del agente.
 
-> Se usa whatsapp-web.js (no open-wa): open-wa quedó incompatible con el
-> WhatsApp Web actual. whatsapp-web.js es la opción mantenida y estable.
+> Se usa Baileys (no open-wa ni whatsapp-web.js): open-wa quedó incompatible con
+> el WhatsApp Web actual, y whatsapp-web.js no puede descargar las notas de voz.
+> Baileys descifra los medios nativamente en Node (sin navegador), así que las
+> **notas de voz sí funcionan** (se transcriben con Whisper).
 
 ## ⚠️ Advertencia
 
@@ -41,19 +43,22 @@ npm start          # muestra el QR
 ## Cómo funciona
 
 ```
-WhatsApp ──► bot.js (whatsapp-web.js) ──HTTP──► agente (localhost:5000) ──► respuesta
+WhatsApp ──► bot.js (Baileys) ──HTTP──► agente (localhost:5000) ──► respuesta
+  texto   ─────────────────────► POST /message
+  voz     ─► descarga+descifra ─► POST /audio (Whisper transcribe) ─► respuesta
 ```
 
-Es el mismo agente de la app web: mismas herramientas, RAG, validador y memoria
-por contacto. Escribe **reiniciar** en el chat para borrar la memoria de ese hilo.
+Es el mismo agente de la app web: mismas herramientas, RAG, validador, garantías
+y memoria por contacto. Escribe **reiniciar** en el chat para borrar la memoria.
 
 ## Notas
 
-- Usa el Chrome del sistema (no descarga Chromium). Si tu Chrome está en otra
-  ruta, define la variable de entorno `CHROME_PATH`.
+- **Notas de voz:** se transcriben con Whisper local (faster-whisper). La primera
+  tarda un poco más (carga el modelo); luego es rápida.
 - Cada respuesta tarda ~5-15 s (modelo local). Para más velocidad, cambia el
   agente a Groq en el `.env`.
-- El QR expira cada ~20 s y se regenera solo hasta que lo escaneas.
+- El QR expira y se regenera solo hasta que lo escaneas. La sesión queda guardada
+  en `baileys_auth/`, así que solo escaneas una vez.
 
 ## ¿Y si otro maneja el chatbot?
 
