@@ -16,6 +16,8 @@
 
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const qrimg = require('qrcode');
+const path = require('path');
 
 const AGENTE = process.env.AGENTE_URL || 'http://localhost:5000/message';
 
@@ -44,6 +46,10 @@ client.on('qr', (qr) => {
   console.log('\n================  ESCANEA ESTE QR  ================');
   console.log('WhatsApp en el celular > Dispositivos vinculados > Vincular un dispositivo\n');
   qrcode.generate(qr, { small: true });
+  // Tambien lo guarda como imagen nitida (qr.png) para escanear mas facil.
+  qrimg.toFile(path.join(__dirname, 'qr.png'), qr, { width: 480, margin: 2 }, (e) => {
+    if (!e) console.log('>> QR tambien guardado en whatsapp-bot/qr.png');
+  });
 });
 
 client.on('authenticated', () => console.log('>> Autenticado. Cargando...'));
@@ -61,25 +67,21 @@ client.on('message', async (msg) => {
 
   console.log(`<- ${msg.from}: ${body}`);
   try {
-    const chat = await msg.getChat();
-    chat.sendStateTyping();
+    try { const chat = await msg.getChat(); await chat.sendStateTyping(); } catch (_) {}
 
     const resp = await fetch(AGENTE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: msg.from, body }),
-      signal: AbortSignal.timeout(90000),
     });
     const data = await resp.json();
     const reply = data.reply || 'No pude responder en este momento.';
 
-    await client.sendMessage(msg.from, reply);
+    await msg.reply(reply);   // responde en el mismo chat (soporta formato @lid)
     console.log(`-> ${msg.from}: ${reply.slice(0, 60)}...`);
   } catch (e) {
-    console.error('error:', e.message);
-    try {
-      await client.sendMessage(msg.from, 'Tuve un problema técnico. Intenta de nuevo en un momento.');
-    } catch (_) {}
+    console.error('error al responder:', (e && (e.stack || e.message)) || e);
+    try { await msg.reply('Tuve un problema técnico. Intenta de nuevo en un momento.'); } catch (_) {}
   }
 });
 
