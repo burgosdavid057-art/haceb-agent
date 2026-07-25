@@ -28,3 +28,6 @@ whatsapp-bot/session*.data.json
 **.node-persist**
 **_IGNORE_**
 # end managed
+
+# Binario de cloudflared (se auto-descarga)
+bin/

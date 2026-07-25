@@ -132,6 +132,65 @@ def message():
     return responder(texto)
 
 
+DEMO_HTML = """<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Haceb · WhatsApp (demo)</title>
+<style>
+ :root{--wa:#075E54;--wa2:#128C7E;--out:#DCF8C6;--bg:#E5DDD5}
+ *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+ body{margin:0;background:#111;display:flex;justify-content:center}
+ .phone{width:100%;max-width:460px;height:100vh;display:flex;flex-direction:column;background:var(--bg)}
+ .top{background:var(--wa);color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px}
+ .av{width:38px;height:38px;border-radius:50%;background:var(--wa2);display:grid;place-items:center;font-size:20px}
+ .top .n{font-weight:600}.top .s{font-size:12px;opacity:.85}
+ .chat{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;
+  background-image:linear-gradient(rgba(229,221,213,.6),rgba(229,221,213,.6))}
+ .b{max-width:78%;padding:8px 11px;border-radius:9px;font-size:14.5px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px .5px rgba(0,0,0,.13)}
+ .in{background:#fff;align-self:flex-start;border-top-left-radius:0}
+ .out{background:var(--out);align-self:flex-end;border-top-right-radius:0}
+ .t{font-size:10px;color:#667;text-align:right;margin-top:2px}
+ .bar{display:flex;gap:8px;padding:10px;background:#F0F0F0}
+ .bar input{flex:1;border:none;border-radius:22px;padding:11px 15px;font-size:15px;outline:none}
+ .bar button{border:none;background:var(--wa2);color:#fff;width:46px;height:46px;border-radius:50%;font-size:20px;cursor:pointer}
+ .typing{font-style:italic;color:#667;font-size:13px;align-self:flex-start;padding:2px 6px}
+</style></head><body>
+<div class="phone">
+ <div class="top"><div class="av">🧊</div><div><div class="n">Haceb · Asistente</div><div class="s" id="st">en línea</div></div></div>
+ <div class="chat" id="chat"></div>
+ <div class="bar"><input id="msg" placeholder="Escribe un mensaje" autocomplete="off">
+ <button id="send">➤</button></div>
+</div>
+<script>
+ const chat=document.getElementById('chat'),inp=document.getElementById('msg'),
+   btn=document.getElementById('send'),st=document.getElementById('st');
+ const FROM='demo-'+Math.random().toString(36).slice(2,8);
+ function hora(){const d=new Date();return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')}
+ function burbuja(txt,tipo){const b=document.createElement('div');b.className='b '+tipo;
+   b.textContent=txt;const t=document.createElement('div');t.className='t';t.textContent=hora();
+   b.appendChild(t);chat.appendChild(b);chat.scrollTop=chat.scrollHeight;return b}
+ let typingEl=null;
+ function typing(on){st.textContent=on?'escribiendo…':'en línea';
+   if(on&&!typingEl){typingEl=document.createElement('div');typingEl.className='typing';typingEl.textContent='escribiendo…';chat.appendChild(typingEl);chat.scrollTop=chat.scrollHeight}
+   if(!on&&typingEl){typingEl.remove();typingEl=null}}
+ async function enviar(){const txt=inp.value.trim();if(!txt)return;inp.value='';
+   burbuja(txt,'out');typing(true);btn.disabled=true;
+   try{const r=await fetch('/message',{method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({from:FROM,body:txt})});const d=await r.json();
+     typing(false);burbuja(d.reply||'(sin respuesta)','in');}
+   catch(e){typing(false);burbuja('⚠ No pude conectar con el agente.','in');}
+   btn.disabled=false;inp.focus();}
+ btn.onclick=enviar;inp.addEventListener('keydown',e=>{if(e.key==='Enter')enviar()});
+ setTimeout(()=>burbuja('¡Hola! Soy el asistente de electrodomésticos Haceb 🧊 Pregúntame por una nevera, garantía, si cabe en tu cocina, consumo de energía…','in'),300);
+ inp.focus();
+</script></body></html>"""
+
+
+@app.route("/demo", methods=["GET"])
+def demo():
+    return DEMO_HTML
+
+
 @app.route("/", methods=["GET"])
 def salud():
     return {"servicio": "agente Haceb WhatsApp", "estado": "ok"}

@@ -1,8 +1,11 @@
 {
   "name": "haceb-whatsapp-bot",
   "version": "1.0.0",
-  "description": "Puente open-wa <-> agente Haceb",
+  "description": "Chatbot de WhatsApp conectado al agente Haceb",
   "type": "commonjs",
   "scripts": { "start": "node bot.js" },
-  "dependencies": { "@open-wa/wa-automate": "^4.72.0" }
+  "dependencies": {
+    "whatsapp-web.js": "^1.26.0",
+    "qrcode-terminal": "^0.12.0"
+  }
 }
