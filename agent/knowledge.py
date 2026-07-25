@@ -149,31 +149,24 @@ def embeber(
     tipo: str = "RETRIEVAL_DOCUMENT",
     verboso: bool = False,
 ) -> list[list[float]]:
-    """Vectoriza en lotes usando la capa llm (rota llaves ante cuota agotada).
+    """Vectoriza en lotes con el proveedor activo (Ollama local o Gemini).
 
-    La capa gratuita de Gemini limita fuerte los embeddings; por eso el indice
-    se precomputa antes del evento y se versiona el resultado, no el proceso.
+    Con Ollama los embeddings son locales e ilimitados. Con Gemini hay cuota,
+    por eso se espera entre lotes y el indice se precomputa una sola vez.
     """
     import time as _t
 
-    from google.genai import types
-
     from . import llm
 
+    es_ollama = llm.proveedor() == "ollama"
     vectores: list[list[float]] = []
     for i in range(0, len(textos), LOTE):
         lote = textos[i:i + LOTE]
-        r = llm.embed(
-            lote,
-            config=types.EmbedContentConfig(
-                task_type=tipo, output_dimensionality=DIM_EMBED
-            ),
-        )
-        vectores.extend(list(e.values) for e in r.embeddings)
+        vectores.extend(llm.embed_textos(lote, tipo))
         if verboso:
             print(f"      +{len(lote)} vectores")
-        if i + LOTE < len(textos):
-            _t.sleep(PAUSA_SEG)
+        if i + LOTE < len(textos) and not es_ollama:
+            _t.sleep(PAUSA_SEG)  # solo Gemini necesita respirar entre lotes
     return vectores
 
 

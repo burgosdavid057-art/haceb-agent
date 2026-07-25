@@ -70,6 +70,10 @@ def config_openai() -> dict:
             "api_key": os.environ.get("OLLAMA_API_KEY", "ollama"),
             "modelo": os.environ.get("OLLAMA_MODEL", "llama3.3"),
             "proveedor": "ollama",
+            # Ventana de contexto: Ollama usa 2048 por defecto, muy poco para el
+            # system prompt + 9 herramientas + resultados + historial. Se sube
+            # para conversaciones naturales de varios turnos.
+            "num_ctx": int(os.environ.get("OLLAMA_NUM_CTX", "8192")),
         }
     # groq
     return {
@@ -198,10 +202,46 @@ def generar(contents, config=None):
 
 
 def embed(contents, config=None):
-    """embed_content con rotacion de llaves."""
+    """embed_content de Gemini, con rotacion de llaves."""
     return _ejecutar(
         lambda c: c.models.embed_content(model=MODELO_EMBED, contents=contents, config=config)
     )
+
+
+def embed_textos(textos, tipo: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
+    """Vectoriza con el proveedor de embeddings activo.
+
+    Si el agente corre sobre Ollama, los embeddings tambien son locales
+    (nomic-embed-text por defecto): RAG 100% en la maquina, sin cuota ni nube.
+    Si no, usa Gemini. Ambos devuelven vectores de 768 dimensiones.
+    """
+    load_dotenv()
+    textos = list(textos)
+
+    if proveedor() == "ollama":
+        modelo = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text").strip()
+        from openai import OpenAI
+
+        # nomic-embed-text rinde bastante mejor con sus prefijos de tarea:
+        # distingue el texto que se guarda del que se consulta.
+        entrada = textos
+        if "nomic" in modelo:
+            pref = "search_query: " if tipo == "RETRIEVAL_QUERY" else "search_document: "
+            entrada = [pref + t for t in textos]
+
+        cfg = config_openai()
+        cli = OpenAI(base_url=cfg["base_url"], api_key=cfg["api_key"], timeout=120.0)
+        r = cli.embeddings.create(model=modelo, input=entrada)
+        return [d.embedding for d in r.data]
+
+    # Gemini
+    from google.genai import types
+
+    r = embed(
+        textos,
+        config=types.EmbedContentConfig(task_type=tipo, output_dimensionality=768),
+    )
+    return [list(e.values) for e in r.embeddings]
 
 
 def disponible() -> bool:

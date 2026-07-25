@@ -1,0 +1,9 @@
+# Modelo del agente Haceb: qwen2.5:7b con ventana de contexto grande horneada,
+# para conversaciones naturales de varios turnos (system prompt + 9 herramientas
+# + resultados + historial no caben en los 2048 por defecto de Ollama).
+#
+#   ollama create haceb-qwen -f Modelfile
+#
+FROM qwen2.5:7b
+PARAMETER num_ctx 8192
+PARAMETER temperature 0.2

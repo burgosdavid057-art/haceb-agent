@@ -34,6 +34,14 @@ def _cliente():
     return _cliente_cache[clave], cfg["modelo"]
 
 
+def _extra(cfg: dict) -> dict:
+    """Opciones que Ollama acepta por fuera del estandar OpenAI (ventana de
+    contexto). Vacio para Groq, que no las necesita."""
+    if cfg.get("proveedor") == "ollama" and cfg.get("num_ctx"):
+        return {"extra_body": {"options": {"num_ctx": cfg["num_ctx"]}}}
+    return {}
+
+
 def _mensajes_iniciales(historial, mensaje):
     # historial es una lista de mensajes estilo OpenAI (dicts). Si viene vacio o
     # de otro backend (Content de Gemini), arrancamos limpio con el system.
@@ -49,6 +57,7 @@ def _mensajes_iniciales(historial, mensaje):
 def responder(mensaje: str, historial: list | None = None) -> tuple[str, Traza, list]:
     """Loop de tool calling estilo OpenAI. Mismo contrato que loop.responder."""
     cliente, modelo = _cliente()
+    extra = _extra(llm.config_openai())
     mensajes = _mensajes_iniciales(historial, mensaje)
     herramientas = herramientas_openai()
     traza = Traza()
@@ -60,6 +69,7 @@ def responder(mensaje: str, historial: list | None = None) -> tuple[str, Traza, 
             tools=herramientas,
             tool_choice="auto",
             temperature=0.2,
+            **extra,
         )
         msg = resp.choices[0].message
 
@@ -134,6 +144,7 @@ def validar(respuesta: str, evidencia_json: str) -> dict:
             ],
             temperature=0.0,
             response_format={"type": "json_object"},
+            **_extra(llm.config_openai()),
         )
         datos = _extraer_json(resp.choices[0].message.content or "")
     except Exception as e:  # noqa: BLE001

@@ -46,22 +46,34 @@ cd haceb-agent
 # 2. Dependencias de Python
 pip install -r requirements.txt
 
-# 3. Ollama: descargar un modelo con tool calling
-#    (qwen2.5 tiene MUY buen manejo de herramientas; elige según tu RAM)
-ollama pull qwen2.5:14b          # ~9 GB  — buen balance, recomendado
-# ollama pull qwen2.5:32b        # ~20 GB — mejor razonamiento
+# 3. Ollama: modelo de CHAT con tool calling (elige según tu RAM)
+ollama pull qwen2.5:7b           # ~4.7 GB — recomendado, tool calling sólido
+# ollama pull qwen2.5:14b        # ~9 GB  — mejor razonamiento
 # ollama pull llama3.3:70b       # ~43 GB — el más fuerte (necesitas ~48GB RAM)
 
-# 4. Dejar Ollama sirviendo (en otra terminal, o ya corre como app)
+# 4. Ollama: modelo de EMBEDDINGS para el RAG (multilingüe, bueno en español)
+ollama pull bge-m3               # ~1.2 GB
+
+# 5. Crear el modelo con ventana de contexto grande horneada (para charlas
+#    largas de varios turnos). El Modelfile ya viene en el repo:
+ollama create haceb-qwen -f Modelfile
+#    (si usas otro modelo base, edita la primera línea del Modelfile)
+
+# 6. Dejar Ollama sirviendo (en otra terminal, o ya corre como app)
 ollama serve
 
-# 5. Configurar el .env para usar Ollama
+# 7. Configurar el .env para usar Ollama
 cp .env.example .env
-#    edita .env y deja SOLO estas dos líneas activas:
+#    edita .env y deja activas estas líneas:
 #       OLLAMA_HOST=localhost:11434
-#       OLLAMA_MODEL=qwen2.5:14b
+#       OLLAMA_MODEL=haceb-qwen
+#       OLLAMA_EMBED_MODEL=bge-m3
+#       OLLAMA_NUM_CTX=8192
 
-# 6. Levantar la app  (el índice de los manuales se arma solo al vuelo)
+# 7. Construir el índice del RAG con los embeddings locales (~1 min, sin nube)
+python build_index.py && python build_vectordb.py
+
+# 8. Levantar la app
 streamlit run app.py
 ```
 
@@ -98,23 +110,19 @@ Corriendo **solo con Ollama** (sin `GOOGLE_API_KEY`):
 
 | Función | Estado |
 |---|---|
-| Agente + tool calling (catálogo, espacio, garantía, energía) | ✅ Funciona |
-| RAG sobre manuales (búsqueda BM25) | ✅ Funciona |
-| Sub-agente validador | ✅ Funciona |
-| Memoria de conversación | ✅ Funciona |
+| Agente + tool calling (catálogo, espacio, garantía, energía) | ✅ 100% local |
+| **RAG semántico** sobre manuales (embeddings bge-m3 + BM25) | ✅ 100% local |
+| Sub-agente validador | ✅ 100% local |
+| Memoria de conversación (contexto 8192 tokens) | ✅ 100% local |
 | **Foto de la placa → producto** (visión) | ⚠️ Necesita una llave de Gemini |
-| RAG semántico con embeddings | ⚠️ Mejora con Gemini; sin él usa BM25 |
 
-Si quieres activar la **foto** y el **RAG semántico**, agrega al `.env` una llave
-gratis de Gemini (https://aistudio.google.com/apikey):
+Todo corre en tu máquina sin cuota. Lo único que aún usa la nube es la **foto de
+la placa** (visión multimodal): si la quieres, agrega al `.env` una llave gratis
+de Gemini (https://aistudio.google.com/apikey):
 
 ```bash
 GOOGLE_API_KEY=tu_llave_aqui
 ```
-
-Con eso, corre `python build_index.py && python build_vectordb.py` para el índice
-vectorial. El agente sigue usando Ollama para pensar; Gemini solo para
-embeddings y visión.
 
 ---
 
