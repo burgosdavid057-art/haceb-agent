@@ -80,31 +80,56 @@ def whatsapp():
     return _twiml(respuesta)
 
 
+# Nombres de campo que usan distintos chatbots de WhatsApp para el remitente
+# y el texto. El endpoint acepta cualquiera, para conectarse sin fricciones.
+_CAMPOS_FROM = ("from", "sender", "phone", "number", "chatId", "chat_id", "wa_id", "author")
+_CAMPOS_BODY = ("body", "message", "text", "content", "msg", "prompt")
+
+
+def _primer_campo(datos: dict, claves) -> str:
+    for k in claves:
+        v = datos.get(k)
+        if isinstance(v, dict):  # a veces viene anidado, ej. {"message":{"text":...}}
+            v = v.get("text") or v.get("body") or v.get("content")
+        if v:
+            return str(v)
+    return ""
+
+
 @app.route("/message", methods=["POST"])
 def message():
-    """Endpoint JSON para puentes externos (ej. open-wa).
+    """Endpoint JSON para conectar cualquier chatbot de WhatsApp al agente.
 
-    Recibe {"from": "...", "body": "..."} y devuelve {"reply": "..."}.
-    Mantiene memoria por remitente igual que el webhook de Twilio.
+    Entrada flexible (acepta from/sender/phone/... y body/message/text/...):
+        {"from": "573001112233", "body": "mi nevera no enfria"}
+    Salida:
+        {"reply": "...", "from": "573001112233"}
+
+    Mantiene memoria por remitente. Escribe 'reiniciar' para limpiarla.
     """
-    datos = request.get_json(silent=True) or {}
-    remitente = str(datos.get("from") or "desconocido")
-    cuerpo = (datos.get("body") or "").strip()
+    datos = request.get_json(silent=True) or request.form.to_dict() or {}
+    remitente = _primer_campo(datos, _CAMPOS_FROM) or "desconocido"
+    cuerpo = _primer_campo(datos, _CAMPOS_BODY).strip()
+
+    def responder(texto):
+        # Devuelve varias claves comunes para encajar con distintos chatbots.
+        return {"reply": texto, "response": texto, "message": texto, "from": remitente}
 
     if not cuerpo:
-        return {"reply": "Hola 👋 Soy el asistente de Haceb. ¿En qué te ayudo con tu electrodoméstico?"}
+        return responder("Hola 👋 Soy el asistente de electrodomésticos Haceb. "
+                         "¿En qué te ayudo con tu equipo?")
 
-    if cuerpo.lower() in ("reiniciar", "reset", "empezar"):
+    if cuerpo.lower() in ("reiniciar", "reset", "empezar", "/reset"):
         _memoria.pop(remitente, None)
-        return {"reply": "Listo, empezamos de nuevo. ¿En qué te ayudo?"}
+        return responder("Listo, empezamos de nuevo. ¿En qué te ayudo?")
 
     try:
-        respuesta = responder_texto(remitente, cuerpo)
+        texto = responder_texto(remitente, cuerpo)
     except Exception as e:
         app.logger.error("fallo agente: %s", e)
-        respuesta = ("Tuve un problema consultando la información. "
-                     "Intenta de nuevo o escribe *reiniciar*.")
-    return {"reply": respuesta}
+        texto = ("Tuve un problema consultando la información. "
+                 "Intenta de nuevo o escribe *reiniciar*.")
+    return responder(texto)
 
 
 @app.route("/", methods=["GET"])

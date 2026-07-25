@@ -31,15 +31,18 @@ ev.on('qr.**', async (qrcode) => {
 
 create({
   sessionId: 'haceb',
-  headless: true,
+  headless: false,       // Chrome visible: escaneas el QR directo en la ventana
   qrTimeout: 0,          // no expira el QR
-  authTimeout: 0,
+  authTimeout: 60,
   cacheEnabled: false,
   useChrome: true,
-  killProcessOnBrowserClose: true,
+  killProcessOnBrowserClose: false,
   throwErrorOnTosBlock: false,
   disableSpins: true,
-}).then((client) => start(client));
+  popup: false,
+}).then((client) => start(client)).catch((e) => {
+  console.error('No se pudo iniciar:', e.message);
+});
 
 async function start(client) {
   console.log('>> Agente Haceb conectado a WhatsApp. Esperando mensajes...');
