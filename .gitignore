@@ -1,0 +1,21 @@
+# Secretos — nunca al repositorio
+.env
+*.key
+
+# Datos: catalog.json y manuals/ SÍ se versionan (son la base del RAG y no
+# necesitan llaves para funcionar con Ollama + BM25). index/ y chroma/ se
+# regeneran con build_index.py + build_vectordb.py (solo mejoran el RAG si hay
+# llave de Gemini para los embeddings).
+data/index/
+data/chroma/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Logs y temporales
+*.log
+_run_*.py
+evals/resultados.json
